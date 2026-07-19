@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Guided SOAR Journal</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        /* Define Color Themes */
+        :root {
+            --bg-scripture: #e4f6f5;
+            --bg-observation: #e1f0fb;
+            --bg-application: #e6e6fa;
+            --bg-reflection: #ded9f0;
+        }
+
+        /* General page setup */
+        body {
+            font-family: 'Georgia', serif;
+            margin: 0;
+            padding: 60px 20px;
+            background-color: #f7f8fa; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            transition: filter 0.3s ease;
+        }
+
+        body.sidebar-open .journal-container { filter: brightness(0.95); }
+        body.hide-tips .instruction-text, body.hide-tips .obs-prompt-box { display: none !important; }
+
+        /* =========================================
+           SIDEBAR & UTILS
+           ========================================= */
+        .sidebar-toggle {
+            position: fixed; top: 30px; right: 30px; z-index: 1001;
+            background-color: #fff; border: 1px solid #e0e0e0; padding: 12px 24px;
+            border-radius: 30px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+            cursor: pointer; font-family: 'Helvetica Neue', sans-serif;
+            font-size: 14px; font-weight: bold; color: #333;
+            display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;
+        }
+        .sidebar-toggle:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.1); transform: translateY(-2px); }
+
+        .sidebar {
+            position: fixed; top: 0; right: -320px; width: 320px; height: 100vh;
+            background-color: #ffffff; box-shadow: -4px 0 25px rgba(0,0,0,0.1);
+            padding: 30px 25px; box-sizing: border-box; display: flex; flex-direction: column; gap: 25px;
+            z-index: 1002; font-family: 'Helvetica Neue', sans-serif; transition: right 0.4s ease; overflow-y: auto;
+        }
+        .sidebar.active { right: 0; }
+        .sidebar-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f0f0f0; padding-bottom: 10px; }
+        .sidebar-header h2 { margin: 0; font-size: 18px; color: #333; text-transform: uppercase; }
+        .close-sidebar { background: none; border: none; font-size: 20px; cursor: pointer; color: #999; }
+        .close-sidebar:hover { color: #333; }
+        
+        .sidebar-section { display: flex; flex-direction: column; gap: 12px; }
+        .sidebar-section label { font-size: 13px; color: #777; font-weight: bold; text-transform: uppercase; }
+        .sidebar-select, .sidebar-btn { padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; background-color: #f9f9f9; width: 100%; font-family: inherit; cursor: pointer; text-align: left; }
+        .sidebar-btn { display: flex; align-items: center; gap: 10px; transition: 0.2s; }
+        .sidebar-btn:hover { background-color: #e0e0e0; }
+        .danger-btn { color: #d32f2f; background-color: #fff; border-color: #ffcdd2; }
+        .danger-btn:hover { background-color: #ffebee; }
+
+        .toggle-container { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+        .toggle-container input { cursor: pointer; width: 16px; height: 16px; accent-color: #333; }
+        .toggle-container span { font-size: 14px; color: #333; }
+
+        .sidebar-footer { margin-top: auto; padding-top: 20px; border-top: 1px solid #f0f0f0; text-align: center; }
+        .first-timer-toggle { font-size: 13px; color: #777; text-decoration: none; display: inline-flex; align-items: center; gap: 6px; transition: color 0.2s; }
+        .first-timer-toggle:hover { color: #333; }
+        .video-thumbnail-container { display: block; position: relative; border-radius: 6px; overflow: hidden; margin-top: 10px; }
+        .video-thumbnail-container img { width: 100%; display: block; }
+        .play-button { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(30, 30, 30, 0.85); color: #fff; padding: 8px 14px; border-radius: 30px; font-weight: bold; font-size: 12px; backdrop-filter: blur(4px); display: flex; align-items: center; gap: 6px; }
+
+        /* =========================================
+           MAIN LAYOUT & CARDS
+           ========================================= */
+        .journal-container {
+            max-width: 900px; width: 100%; display: flex; flex-direction: column; gap: 20px;
+            background-color: #fff; padding: 40px; border-radius: 12px;
+            box-shadow: 0 4px 25px rgba(0,0,0,0.06); box-sizing: border-box;
+        }
+
+        .header { display: flex; justify-content: space-between; align-items: flex-end; margin-bottom: 10px; }
+        .logo-container { display: flex; flex-direction: column; align-items: center; }
+        .logo { font-size: 42px; letter-spacing: 2px; color: #000; line-height: 1; }
+        .logo-subtitle { font-size: 14px; letter-spacing: 4px; color: #555; margin-top: 5px; text-transform: uppercase;}
+
+        .scripture-box { display: flex; align-items: center; border: 1px solid #333; padding: 10px 15px; width: 300px; background-color: #fff; box-shadow: 6px 6px 0px 0px #e6e8f4; }
+        .scripture-box span { color: #555; font-size: 18px; margin-right: 10px; }
+        .scripture-box input { border: none; outline: none; flex-grow: 1; font-family: inherit; font-size: 18px; background: transparent; }
+
+        .card { padding: 30px; border-radius: 8px; display: flex; flex-direction: column; position: relative; }
+        .bg-scripture { background-color: var(--bg-scripture); }
+        .bg-observation { background-color: var(--bg-observation); }
+        .bg-application { background-color: var(--bg-application); }
+        .bg-reflection { background-color: var(--bg-reflection); }
+
+        .card-header { border-bottom: 2px solid rgba(0,0,0,0.1); padding-bottom: 8px; margin-bottom: 12px; }
+        .card-header h2 { margin: 0; font-size: 22px; color: #222; text-transform: uppercase; letter-spacing: 1px; }
+
+        .instruction-text { font-family: 'Helvetica Neue', sans-serif; font-size: 14px; color: #444; line-height: 1.5; margin-bottom: 15px; background: rgba(255,255,255,0.4); padding: 10px 15px; border-radius: 6px; border-left: 4px solid #333; }
+        
+        textarea { width: 100%; background: transparent; border: none; outline: none; font-family: inherit; font-size: 18px; color: #333; line-height: 1.6; box-sizing: border-box; resize: none; overflow: hidden; min-height: 40px; display: block; }
+        textarea::placeholder { color: #757575; font-style: italic; }
+
+        .scripture-layout { display: flex; gap: 20px; align-items: stretch; }
+        .scripture-write { flex: 6; display: flex; flex-direction: column; }
+        .scripture-context { flex: 4; background: rgba(255,255,255,0.6); border-radius: 8px; padding: 15px; font-family: 'Helvetica Neue', sans-serif; font-size: 13.5px; color: #333; border: 1px solid rgba(0,0,0,0.05); height: fit-content; }
+        .scripture-context h3 { margin: 0 0 10px 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 5px; }
+
+        /* Observation Tabs */
+        .observation-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; background: rgba(255,255,255,0.5); padding: 6px; border-radius: 8px; }
+        .obs-tab { flex: 1; min-width: 100px; padding: 10px 15px; border: none; border-radius: 6px; background: transparent; cursor: pointer; font-family: 'Helvetica Neue', sans-serif; font-weight: bold; font-size: 14px; color: #555; transition: all 0.2s ease; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .obs-tab:hover { background: rgba(255,255,255,0.8); }
+        .obs-tab.active { background: #333; color: #fff; box-shadow: 0 4px 10px rgba(0,0,0,0.15); }
+        
+        .obs-prompt-box { margin-bottom: 15px; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 12px; }
+        .obs-title { font-family: 'Helvetica Neue', sans-serif; font-size: 14px; font-weight: bold; color: #333; text-transform: uppercase; margin-bottom: 3px; }
+        .obs-prompt { font-family: 'Helvetica Neue', sans-serif; font-size: 13.5px; color: #555; font-style: italic; }
+
+        .stem-layout { display: flex; gap: 20px; align-items: flex-start; }
+        .stem-box { flex: 1; display: flex; flex-direction: column; background: rgba(255,255,255,0.4); border-radius: 8px; padding: 15px; border: 1px dashed rgba(0,0,0,0.2); }
+        .stem-box label { font-size: 20px; font-weight: bold; color: #222; margin-bottom: 10px; }
+
+        @media (max-width: 768px) {
+            body { padding: 80px 10px 20px 10px; }
+            .journal-container { padding: 20px; }
+            .scripture-layout, .stem-layout { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+    <button class="sidebar-toggle" onclick="openTools()"><i class="fa-solid fa-gear"></i> Tools</button>
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header"><h2>Settings</h2><button class="close-sidebar" onclick="closeSidebar()"><i class="fa-solid fa-xmark"></i></button></div>
+        <div class="sidebar-section">
+            <label>Interface</label>
+            <label class="toggle-container"><input type="checkbox" id="toggleTips" onchange="toggleInstructionTips()"> <span>Hide Instructional Tips</span></label>
+        </div>
+        <div class="sidebar-section">
+            <label>Color Palette</label>
+            <select class="sidebar-select" onchange="changeTheme(this.value)">
+                <option value="sea">The Sea</option><option value="covenant">The Covenant</option><option value="garden">The Garden</option><option value="wilderness">The Wilderness</option><option value="coat">The Coat</option>
+            </select>
+        </div>
+        <div class="sidebar-section">
+            <label>Reset Workspace</label><button class="sidebar-btn danger-btn" onclick="clearForm()"><i class="fa-solid fa-trash-can"></i> Clear Form</button>
+        </div>
+        <div class="sidebar-footer">
+            <a href="#" class="first-timer-toggle" onclick="toggleFirstTimer(event)"><i class="fa-solid fa-seedling"></i> First time studying?</a>
+            <div id="firstTimerContent" style="display: none; margin-top: 15px; text-align: left;">
+                <a href="https://www.youtube.com/watch?v=Sh3ECwTmjw0" target="_blank" class="video-thumbnail-container"><img src="https://img.youtube.com/vi/Sh3ECwTmjw0/hqdefault.jpg" alt="Why You Can Trust The Bible"><div class="play-button"><i class="fa-solid fa-play"></i> Watch</div></a>
+            </div>
+        </div>
+    </div>
+
+    <div class="journal-container" id="capture-area">
+        <div class="header">
+            <div class="logo-container"><div class="logo">Guided SOAR</div><div class="logo-subtitle">MS Hang Edition</div></div>
+            <div class="scripture-box"><span>Reference:</span><input type="text" id="scriptureInput" placeholder="e.g. John 1:1-5"></div>
+        </div>
+
+        <div class="card bg-scripture">
+            <div class="card-header"><h2>Scripture</h2></div>
+            <div class="instruction-text">
+                <strong><i class="fa-solid fa-circle-exclamation"></i> Remember:</strong> Choose a verse to SOAR on, but remember that we are always examining those verses in light of the book it's in and the Bible as a whole so review the historical context for the passage as well.
+            </div>
+            <div class="scripture-layout">
+                <div class="scripture-write"><textarea id="scriptureTextarea" class="auto-resize" placeholder="Write out the Bible verse or passage here..."></textarea></div>
+                <div class="scripture-context"><h3>Historical Context</h3><div id="historicalContextData" style="line-height: 1.6;"><span style="color:#777; font-style:italic;">Type a reference in the top box to load context!</span></div></div>
+            </div>
+        </div>
+
+        <div class="card bg-observation">
+            <div class="card-header"><h2>Observation</h2></div>
+            <div class="instruction-text"><strong><i class="fa-solid fa-magnifying-glass"></i> Be a Detective:</strong> Click the tabs below to focus your observation.</div>
+            <div class="observation-tabs">
+                <button class="obs-tab active" id="tab-people" onclick="selectTab('people')"><i class="fa-solid fa-users"></i> People</button>
+                <button class="obs-tab" id="tab-actions" onclick="selectTab('actions')"><i class="fa-solid fa-bolt"></i> Actions</button>
+                <button class="obs-tab" id="tab-words" onclick="selectTab('words')"><i class="fa-solid fa-highlighter"></i> Words</button>
+                <button class="obs-tab" id="tab-connect" onclick="selectTab('connect')"><i class="fa-solid fa-link"></i> Connect</button>
+            </div>
+            <div class="obs-prompt-box">
+                <div class="obs-title" id="obs-dynamic-title">Focus: People</div>
+                <div class="obs-prompt" id="obs-dynamic-prompt">Who is speaking? Who is listening? Are there any named characters or groups?</div>
+            </div>
+            <textarea class="auto-resize" placeholder="Write your observations here..."></textarea>
+        </div>
+
+        <div class="card bg-application">
+            <div class="card-header"><h2>Application</h2></div>
+            <div class="instruction-text"><strong><i class="fa-solid fa-arrow-right-arrow-left"></i> The Exchange:</strong> When we learn God's character and purpose, it changes our character and purpose.</div>
+            <div class="stem-layout">
+                <div class="stem-box"><label>God is...</label><textarea class="auto-resize" placeholder="Describe who God is or what He is doing..."></textarea></div>
+                <div class="stem-box"><label>Therefore, I...</label><textarea class="auto-resize" placeholder="How will you live differently today?"></textarea></div>
+            </div>
+        </div>
+
+        <div class="card bg-reflection">
+            <div class="card-header"><h2>Reflection</h2></div>
+            <div class="instruction-text"><strong><i class="fa-solid fa-hands-praying"></i> Pray it out:</strong> Turn the passage into a prayer. Ask God to help you be more like Him, and ask the Holy Spirit to guide your everyday choices and actions.</div>
+            <textarea class="auto-resize" placeholder="Dear God..."></textarea>
+        </div>
+    </div>
+
+    <script>
+        function autoResizeTextarea(el) { el.style.height = 'auto'; el.style.height = el.scrollHeight + 'px'; }
+        document.querySelectorAll('textarea.auto-resize').forEach(t => { t.addEventListener('input', function() { autoResizeTextarea(this); }); autoResizeTextarea(t); });
+
+        function openTools() { document.getElementById('sidebar').classList.add('active'); document.body.classList.add('sidebar-open'); }
+        function closeSidebar() { document.getElementById('sidebar').classList.remove('active'); document.body.classList.remove('sidebar-open'); }
+        function toggleInstructionTips() { document.body.classList.toggle('hide-tips', document.getElementById('toggleTips').checked); }
+        function toggleFirstTimer(e) { e.preventDefault(); const c = document.getElementById('firstTimerContent'); c.style.display = (c.style.display === 'none' ? 'block' : 'none'); }
+        
+        function changeTheme(theme) {
+            const root = document.documentElement;
+            const themes = {
+                'sea': ['#e4f6f5', '#e1f0fb', '#e6e6fa', '#ded9f0'],
+                'covenant': ['#F9B2D7', '#CFECF3', '#DAF9DE', '#F6FFDC'],
+                'garden': ['#F1F3E0', '#D2DCB6', '#A1BC98', '#778873'],
+                'wilderness': ['#F9F8F6', '#EFE9E3', '#D9CFC7', '#C9B59C'],
+                'coat': ['#F5EEE6', '#FFF8E3', '#F3D7CA', '#E6A4B4']
+            };
+            const [s, o, a, r] = themes[theme];
+            root.style.setProperty('--bg-scripture', s); root.style.setProperty('--bg-observation', o); root.style.setProperty('--bg-application', a); root.style.setProperty('--bg-reflection', r);
+        }
+
+        function clearForm() {
+            if(confirm("Clear everything?")) {
+                document.getElementById('scriptureInput').value = '';
+                document.querySelectorAll('textarea').forEach(t => { t.value = ''; autoResizeTextarea(t); });
+                document.getElementById('historicalContextData').innerHTML = '<span style="color:#777; font-style:italic;">Type a reference in the top box!</span>';
+                closeSidebar();
+            }
+        }
+
+        const obsPrompts = {
+            'people': { title: 'Focus: People', text: 'Who is speaking? Who is listening? Are there any named characters or groups?' },
+            'actions': { title: 'Focus: Actions', text: 'What is actually happening? What are the main events or commands?' },
+            'words': { title: 'Focus: Words', text: 'What words are repeated, confusing, or seem really important to the story?' },
+            'connect': { title: 'Focus: Connect', text: 'What other verses/stories does this remind you of? Check for cross-references to other parts of the Bible.' }
+        };
+
+        function selectTab(tabId) {
+            document.querySelectorAll('.obs-tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab-' + tabId).classList.add('active');
+            document.getElementById('obs-dynamic-title').innerText = obsPrompts[tabId].title;
+            document.getElementById('obs-dynamic-prompt').innerText = obsPrompts[tabId].text;
+        }
+
+        const bibleData = {
+            "genesis": { author: "Moses", time: "1440-1400 BC", audience: "Israelites", purpose: "Record the origins of the world and God's covenant." },
+            "exodus": { author: "Moses", time: "1440-1400 BC", audience: "Israelites", purpose: "Document God's deliverance of Israel from Egypt." },
+            "leviticus": { author: "Moses", time: "1440-1400 BC", audience: "Israelites/Priests", purpose: "Instruct Israel on how to live holy lives." },
+            "numbers": { author: "Moses", time: "1440-1400 BC", audience: "Israelites", purpose: "Show the consequences of unbelief." },
+            "deuteronomy": { author: "Moses", time: "1400 BC", audience: "Israelites", purpose: "Remind the Israelites of the Law." },
+            "joshua": { author: "Joshua", time: "1400-1370 BC", audience: "Israelites", purpose: "Document the conquest of Canaan." },
+            "judges": { author: "Samuel", time: "1050-1000 BC", audience: "Israelites", purpose: "Show Israel's cycle of sin and need for a king." },
+            "ruth": { author: "Unknown", time: "1000 BC", audience: "Israelites", purpose: "Demonstrate God's providence and trace David's lineage." },
+            "matthew": { author: "Matthew", time: "50-65 AD", audience: "Jewish audience", purpose: "Present Jesus as the promised Messiah." },
+            "mark": { author: "John Mark", time: "50-65 AD", audience: "Gentile Christians", purpose: "Present Christ as the suffering servant." },
+            "luke": { author: "Luke", time: "50-62 AD", audience: "Theophilus/Gentiles", purpose: "Provide an accurate account of Jesus." },
+            "john": { author: "John", time: "80-95 AD", audience: "All believers", purpose: "Believe that Jesus is the Son of God." },
+            "acts": { author: "Luke", time: "60-70 AD", audience: "Early Church", purpose: "Document the birth/spread of the early Church." },
+            "romans": { author: "Paul", time: "57 AD", audience: "Christians in Rome", purpose: "Systematically explain the Gospel." },
+            "revelation": { author: "John", time: "90-95 AD", audience: "Seven churches of Asia", purpose: "Reveal the ultimate victory of Jesus Christ." }
+        };
+
+        let typingTimer;
+        document.getElementById('scriptureInput').addEventListener('input', function() {
+            const val = this.value.trim().toLowerCase();
+            const ctx = document.getElementById('historicalContextData');
+            let match = Object.keys(bibleData).find(book => val.startsWith(book));
+            ctx.innerHTML = match ? `<strong>Author:</strong> ${bibleData[match].author}<br><strong>Time:</strong> ${bibleData[match].time}<br><strong>Audience:</strong> ${bibleData[match].audience}<br><strong>Purpose:</strong> ${bibleData[match].purpose}` : '<span style="color:#777; font-style:italic;">Type a reference in the top box!</span>';
+            clearTimeout(typingTimer);
+            typingTimer = setTimeout(async () => {
+                if (/\d/.test(val)) {
+                    try {
+                        const r = await fetch(`https://bible-api.com/${encodeURIComponent(this.value.trim())}`);
+                        const d = await r.json();
+                        if (d.text) { const t = document.getElementById('scriptureTextarea'); t.value = d.text.trim(); autoResizeTextarea(t); }
+                    } catch(e) {}
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>
